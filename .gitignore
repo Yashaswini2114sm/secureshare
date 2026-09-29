@@ -1,0 +1,28 @@
+# Node
+node_modules/
+.next/
+dist/
+build/
+npm-debug.log
+yarn-error.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+.venv/
+
+# Docker
+.docker/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Project specifics
+backend/db/
+backend/uploads/
+*.sqlite3

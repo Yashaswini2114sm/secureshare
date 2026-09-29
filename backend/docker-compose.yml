@@ -1,0 +1,75 @@
+# ═══════════════════════════════════════════════════════════════════
+# SecureShare Docker Compose
+# ═══════════════════════════════════════════════════════════════════
+# Starts:
+#   1. FastAPI backend (api) on port 8000
+#   2. PostgreSQL database (db) on port 5432
+#
+# Usage:
+#   docker-compose up --build        # Start everything
+#   docker-compose down              # Stop everything
+#   docker-compose down -v           # Stop & remove data volumes
+# ═══════════════════════════════════════════════════════════════════
+
+
+
+services:
+  # ── FastAPI Backend ────────────────────────────────────────────
+  api:
+    build: .
+    container_name: secureshare-api
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=SecureShare
+      - DEBUG=true
+      - DATABASE_URL=postgresql+asyncpg://secureshare:secureshare_password@db:5432/secureshare_db
+      - JWT_SECRET_KEY=docker-dev-secret-change-in-production
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRATION_MINUTES=60
+      - UPLOAD_DIR=/app/uploads
+      - MAX_FILE_SIZE_MB=100
+      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+    volumes:
+      - upload_data:/app/uploads     # Persist encrypted files
+    depends_on:
+      db:
+        condition: service_healthy   # Wait for DB to be ready
+    networks:
+      - secureshare-network
+    restart: unless-stopped
+
+  # ── PostgreSQL Database ────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: secureshare-db
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=secureshare
+      - POSTGRES_PASSWORD=secureshare_password
+      - POSTGRES_DB=secureshare_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # Persist database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U secureshare -d secureshare_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - secureshare-network
+    restart: unless-stopped
+
+
+
+# ── Volumes ──────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  upload_data:
+    driver: local
+
+# ── Network ──────────────────────────────────────────────────────
+networks:
+  secureshare-network:
+    driver: bridge
