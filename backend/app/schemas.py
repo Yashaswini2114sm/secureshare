@@ -10,7 +10,7 @@ Pydantic automatically:
 """
 
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel, EmailStr, Field
@@ -53,6 +53,7 @@ class UserLogin(BaseModel):
     """Request schema for user login."""
     username: str = Field(..., description="Username")
     password: str = Field(..., description="Password")
+    totp_code: Optional[str] = Field(None, description="6-digit TOTP code if 2FA is enabled")
 
 
 class UserResponse(BaseModel):
@@ -60,6 +61,7 @@ class UserResponse(BaseModel):
     id: int
     username: str
     email: str
+    is_2fa_enabled: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -73,6 +75,14 @@ class TokenResponse(BaseModel):
     access_token: str = Field(..., description="JWT access token")
     token_type: str = Field(default="bearer", description="Token type (always 'bearer')")
     user: UserResponse = Field(..., description="Authenticated user profile")
+
+
+class RegisterResponse(BaseModel):
+    """Response schema for successful registration, including 2FA setup URI."""
+    message: str
+    success: bool = True
+    totp_secret: str = Field(..., description="Base32 TOTP secret")
+    otpauth_url: str = Field(..., description="URI for Google Authenticator QR Code")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -94,6 +104,7 @@ class FileUploadResponse(BaseModel):
     is_public: bool = Field(True, description="Whether file is publicly accessible")
     created_at: datetime = Field(..., description="Upload timestamp")
     message: str = Field(default="File uploaded and encrypted successfully")
+    crypto_logs: Optional[Dict[str, Any]] = Field(None, description="Cryptographic logs for demonstration")
 
     model_config = {"from_attributes": True}
 

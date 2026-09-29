@@ -53,6 +53,7 @@ from app.encryption import (
     encrypt_file,
     generate_encryption_key,
     verify_file_integrity,
+    perform_ecdh_key_exchange,
 )
 from app.models import DownloadLog, File as FileModel, User
 from app.schemas import (
@@ -85,6 +86,7 @@ async def upload_file(
     is_one_time: bool = Form(False, description="Delete after first download"),
     max_downloads: int = Form(0, description="Max download count (0 = unlimited)"),
     is_public: bool = Form(True, description="Allow anyone with link to download"),
+    client_public_key_hex: Optional[str] = Form(None, description="ECDH Public Key from client"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> FileUploadResponse:
@@ -105,24 +107,33 @@ async def upload_file(
         )
 
     file_hash = calculate_file_hash(file_data)
-    encryption_key, encryption_iv = generate_encryption_key()
+    
+    # ── Diffie-Hellman Key Exchange (ECDH) ───────────────────────
+    if client_public_key_hex:
+        encryption_key, server_pub_key = perform_ecdh_key_exchange(client_public_key_hex)
+        _, encryption_iv = generate_encryption_key()  # Still need random IV
+    else:
+        encryption_key, encryption_iv = generate_encryption_key()
+        server_pub_key = "N/A"
+
     encrypted_data = encrypt_file(file_data, encryption_key, encryption_iv)
 
-    print("\n" + "="*60)
-    print("🔒 SECURESHARE CRYPTOGRAPHY ENGINE 🔒")
-    print("="*60)
+    print("\n" + "="*70)
+    print("🔒 SECURESHARE ECDH CRYPTOGRAPHY ENGINE 🔒")
+    print("="*70)
     print(f"File Name: {file.filename}")
-    try:
-        print(f"Original File (first 50 bytes): {file_data[:50]}")
-    except:
-        pass
-    print("-" * 60)
-    print(f"1. Generated SHA-256 Hash: {file_hash}")
-    print(f"2. Generated AES-256 Key:  {encryption_key}")
-    print(f"3. Generated AES-IV:       {encryption_iv}")
-    print("-" * 60)
+    print("-" * 70)
+    if client_public_key_hex:
+        print(f"[ECDH] Received Client PubKey: {client_public_key_hex[:30]}...")
+        print(f"[ECDH] Generated Server PubKey: {server_pub_key[:30]}...")
+        print(f"[ECDH] Derived Shared AES Key:  {encryption_key}")
+    else:
+        print(f"[AES] Generated Random AES Key: {encryption_key}")
+    print(f"[AES] Generated AES-IV:         {encryption_iv}")
+    print(f"[HASH] SHA-256 Fingerprint:     {file_hash}")
+    print("-" * 70)
     print(f"Encrypted Ciphertext (first 50 bytes): {encrypted_data[:50].hex()}")
-    print("="*60 + "\n")
+    print("="*70 + "\n")
 
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     import uuid
@@ -162,6 +173,15 @@ async def upload_file(
     await db.flush()
     await db.refresh(file_record)
 
+    crypto_logs = {
+        "client_pub_key": client_public_key_hex if client_public_key_hex else "N/A (Generated random key)",
+        "server_pub_key": server_pub_key,
+        "derived_aes_key": encryption_key,
+        "aes_iv": encryption_iv,
+        "sha256_hash": file_hash,
+        "ciphertext_sample": encrypted_data[:50].hex()
+    }
+
     # Step 9: Return response with file_id for sharing
     return FileUploadResponse(
         file_id=file_record.file_id,
@@ -174,6 +194,7 @@ async def upload_file(
         is_public=file_record.is_public,
         created_at=file_record.created_at,
         message="File uploaded and encrypted successfully",
+        crypto_logs=crypto_logs,
     )
 
 
@@ -430,8 +451,16 @@ async def delete_file(
             detail="You don't have permission to delete this file",
         )
 
-    # Step 3: Delete encrypted file from disk
+    # Step 3: Secure File Shredding (Overwrite with random bytes before deletion)
     if os.path.exists(file_record.stored_path):
+        try:
+            file_size_on_disk = os.path.getsize(file_record.stored_path)
+            with open(file_record.stored_path, "r+b") as f:
+                f.write(os.urandom(file_size_on_disk))
+                f.flush()
+                os.fsync(f.fileno())
+        except Exception as e:
+            print(f"Shredding error (non-fatal): {e}")
         os.remove(file_record.stored_path)
 
     # Step 4: Delete database record (cascade deletes download logs)

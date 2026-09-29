@@ -28,10 +28,13 @@ import hashlib
 import os
 from typing import Tuple
 
-# pyrefly: ignore [missing-import]
 from Crypto.Cipher import AES
-# pyrefly: ignore [missing-import]
 from Crypto.Util.Padding import pad, unpad
+
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives.serialization import PublicFormat, Encoding
 
 
 # AES block size is always 16 bytes (128 bits)
@@ -60,6 +63,50 @@ def generate_encryption_key() -> Tuple[str, str]:
     key = os.urandom(32)   # 256-bit random key
     iv = os.urandom(16)    # 128-bit random IV
     return key.hex(), iv.hex()
+
+
+def perform_ecdh_key_exchange(client_public_key_hex: str) -> Tuple[str, str]:
+    """
+    Perform Elliptic Curve Diffie-Hellman Key Exchange (ECDH).
+    
+    1. Reads the client's public key (hex encoded SECP256R1 point)
+    2. Generates server's ephemeral private key
+    3. Derives the shared secret
+    4. Extracts a 32-byte AES key using HKDF-SHA256
+    
+    Returns:
+        Tuple of (derived_aes_key_hex, server_public_key_hex)
+    """
+    try:
+        client_pub_bytes = bytes.fromhex(client_public_key_hex)
+        if len(client_pub_bytes) == 65 and client_pub_bytes[0] == 0x04:
+            client_pub = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), client_pub_bytes)
+        else:
+            raise ValueError("Invalid client public key format")
+            
+        server_priv = ec.generate_private_key(ec.SECP256R1())
+        server_pub = server_priv.public_key()
+        
+        shared_secret = server_priv.exchange(ec.ECDH(), client_pub)
+        
+        derived_key = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b'secureshare-ecdh-exchange',
+        ).derive(shared_secret)
+        
+        server_pub_bytes = server_pub.public_bytes(
+            encoding=Encoding.X962,
+            format=PublicFormat.UncompressedPoint
+        )
+        
+        return derived_key.hex(), server_pub_bytes.hex()
+    except Exception as e:
+        print(f"ECDH Error: {e}")
+        # Fallback to random if client provided invalid key
+        key = os.urandom(32).hex()
+        return key, "error_fallback_key"
 
 
 def encrypt_file(file_data: bytes, key_hex: str, iv_hex: str) -> bytes:

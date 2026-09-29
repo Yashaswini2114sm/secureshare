@@ -16,14 +16,15 @@ import {
   getCurrentUser,
   removeToken,
   setToken,
+  RegisterResponse,
 } from "@/lib/api";
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<LoginResponse>;
-  register: (username: string, email: string, password: string) => Promise<void>;
+  login: (username: string, password: string, totp_code?: string) => Promise<LoginResponse>;
+  register: (username: string, email: string, password: string) => Promise<RegisterResponse>;
   logout: () => void;
 }
 
@@ -52,15 +53,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     restoreSession();
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const response = await loginUser(username, password);
+  const login = useCallback(async (username: string, password: string, totp_code?: string) => {
+    const response = await loginUser(username, password, totp_code);
     setUser(response.user);
     return response;
   }, []);
 
   const register = useCallback(
     async (username: string, email: string, password: string) => {
-      await registerUser(username, email, password);
+      return await registerUser(username, email, password);
     },
     []
   );

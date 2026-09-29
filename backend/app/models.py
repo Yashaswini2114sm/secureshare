@@ -56,6 +56,8 @@ class User(Base):
     username = Column(String(50), unique=True, nullable=False, index=True)
     email = Column(String(100), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
+    totp_secret = Column(String(32), nullable=True)
+    is_2fa_enabled = Column(Boolean, default=False)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -161,3 +163,31 @@ class DownloadLog(Base):
 
     # Relationship back to File
     file = relationship("File", back_populates="download_logs")
+
+
+class AuditLog(Base):
+    """
+    Security Audit Log.
+    
+    Records every security event for compliance tracking.
+    
+    Columns:
+        id         — Auto-increment primary key
+        user_id    — Optional foreign key to users (if authenticated)
+        action     — Event type (e.g. LOGIN_SUCCESS, FILE_UPLOADED)
+        ip_address — Client IP address
+        user_agent — Client browser/app info
+        timestamp  — Event timestamp (UTC)
+    """
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    action = Column(String(50), nullable=False)
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    timestamp = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+

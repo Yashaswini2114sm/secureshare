@@ -8,6 +8,7 @@ import Link from "next/link";
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [totpCode, setTotpCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -19,7 +20,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(username, password);
+      await login(username, password, totpCode);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -80,6 +81,24 @@ export default function LoginPage() {
                 placeholder="Enter your password"
                 required
                 autoComplete="current-password"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="login-totp" className="block text-sm font-medium text-slate-300 mb-1.5 flex justify-between">
+                <span>Authenticator Code</span>
+                <span className="text-accent-400 text-xs">Required</span>
+              </label>
+              <input
+                id="login-totp"
+                type="text"
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value)}
+                className="input-field font-mono text-center tracking-[0.5em] text-lg"
+                placeholder="000000"
+                maxLength={6}
+                required
+                autoComplete="off"
               />
             </div>
 

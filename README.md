@@ -1,89 +1,86 @@
-# 🔐 SecureShare V1
+# 🔐 SecureShare — Enterprise-Grade Cryptographic File Vault
 
-**Secure File Sharing with AES-256 Encryption**
-
-SecureShare is a full-stack secure file sharing platform that encrypts files before storage, ensuring complete data confidentiality. Built as a Computer Networks & Security (CNS) final year project.
-
----
-
-## ✨ Features
-
-- **AES-256-CBC Encryption** — Military-grade file encryption
-- **SHA-256 Integrity** — File fingerprint verification on every download
-- **JWT Authentication** — Stateless, secure user sessions
-- **Bcrypt Password Hashing** — Irreversible password protection
-- **Password-Protected Downloads** — Optional extra security layer
-- **Auto-Expiration** — Files self-destruct after configurable time
-- **One-Time Downloads** — File deactivates after first download
-- **Download Tracking** — Full audit trail with IP logging
-- **Real-Time Upload Progress** — Visual progress bar
-- **Responsive Dark UI** — Glassmorphism design, works on all devices
+<div align="center">
+  <p><strong>A zero-trust, defense-in-depth file sharing platform built for modern security engineering.</strong></p>
+</div>
 
 ---
+
+## 🚀 Overview
+
+SecureShare is a full-stack secure file sharing platform engineered to prioritize data confidentiality, integrity, and identity verification. Designed as an advanced Computer Networks & Security (CNS) project, it moves beyond basic CRUD operations by implementing real-world applied cryptography and DevSecOps principles.
+
+## ✨ Security Architecture
+
+- **Elliptic-Curve Diffie-Hellman (ECDH)** — Ephemeral P-256 key exchange to prevent Man-in-the-Middle (MitM) attacks during file uploads.
+- **AES-256-CBC Encryption** — Military-grade symmetric file encryption for data-at-rest.
+- **SHA-256 Integrity Verification** — Cryptographic hashing to detect file tampering or corruption.
+- **Google Authenticator 2FA (TOTP)** — HMAC-SHA1 time-based one-time passwords for zero-trust identity verification.
+- **DoD 5220.22-M File Shredding** — Anti-forensic data destruction overwrites disk sectors with cryptographic noise before inode deletion.
+- **Brute-Force Protection** — Dynamic IP rate limiting (`SlowAPI`) to block automated intrusion attempts.
+- **SIEM-Ready Audit Logging** — Comprehensive tracking of all security events (logins, failures, uploads) for incident response.
+- **Bcrypt Password Hashing** — Irreversible, salted password hashing to neutralize rainbow table attacks.
 
 ## 🛠 Tech Stack
 
 | Layer     | Technology       |
 |-----------|------------------|
-| Frontend  | Next.js + Tailwind CSS |
-| Backend   | FastAPI (Python) |
-| Database  | PostgreSQL / SQLite |
-| Encryption| AES-256-CBC      |
-| Hashing   | SHA-256 + Bcrypt |
-| Auth      | JWT              |
-| DevOps    | Docker Compose   |
+| Frontend  | Next.js, React, Tailwind CSS |
+| Backend   | Python, FastAPI, SQLAlchemy |
+| Database  | PostgreSQL |
+| Cryptography | `cryptography`, `pyotp`, WebCrypto API |
+| Infrastructure | Docker Compose, Prometheus, Grafana |
 
 ---
 
-## 🚀 Quick Start
+## ⚡ Quick Start (Docker)
 
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
-- npm 9+
+The easiest way to run the entire stack (Frontend, Backend API, PostgreSQL Database) is via Docker.
 
-### Backend
+```bash
+# Clone the repository
+git clone https://github.com/Yashaswini2114sm/secureshare.git
+cd secureshare/backend
+
+# Spin up the containers in detached mode
+docker compose up -d --build
+```
+
+The app will instantly be available at:
+- **Frontend App:** `http://localhost:3000`
+- **Backend API Docs (Swagger):** `http://localhost:8000/docs`
+
+---
+
+## 📖 Documentation & Study Guides
+
+| Document | Description |
+|----------|-------------|
+| [Project Overview](docs/PROJECT_OVERVIEW.md) | Detailed breakdown of all 8 cryptographic algorithms and why they matter. |
+| [Technical Architecture](docs/TECHNICAL_ARCHITECTURE.md) | System design, API, database schema |
+| [Algorithms Explained](docs/ALGORITHMS_EXPLAINED.md) | AES-256, SHA-256, Bcrypt, JWT deep dives |
+| [Interview Q&A](INTERVIEW_QUESTIONS_AND_ANSWERS.md) | 20 detailed technical interview questions for security roles. |
+
+---
+
+## 🧪 Local Development Setup
+
+If you prefer to run the stack natively without Docker:
+
+### 1. Backend API
 ```bash
 cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
-### Frontend
+### 2. Frontend Next.js
 ```bash
 cd frontend
 npm install
 npm run dev
-```
-
-### Docker (Full Stack)
-```bash
-cd backend
-docker-compose up --build
-```
-
----
-
-## 📖 Documentation
-
-| Document | Description |
-|----------|-------------|
-| [Project Overview](docs/PROJECT_OVERVIEW.md) | Features, architecture, motivation |
-| [Technical Architecture](docs/TECHNICAL_ARCHITECTURE.md) | System design, API, database schema |
-| [Algorithms Explained](docs/ALGORITHMS_EXPLAINED.md) | AES-256, SHA-256, Bcrypt, JWT |
-| [Setup & Deployment](docs/SETUP_AND_DEPLOYMENT.md) | Installation, Docker, testing |
-| [Interview Q&A](INTERVIEW_QUESTIONS_AND_ANSWERS.md) | 20 detailed interview questions |
-
----
-
-## 🧪 Testing
-
-```bash
-cd backend
-pytest tests/ -v --cov=app
 ```
 
 ---
@@ -92,46 +89,20 @@ pytest tests/ -v --cov=app
 
 ```
 secureshare/
-├── backend/                 # FastAPI backend
+├── backend/                 # FastAPI Python Server
 │   ├── app/
-│   │   ├── main.py         # App entry point
-│   │   ├── config.py       # Settings
-│   │   ├── database.py     # SQLAlchemy setup
-│   │   ├── models.py       # Database models
-│   │   ├── schemas.py      # Pydantic schemas
-│   │   ├── auth.py         # JWT + Bcrypt
-│   │   ├── encryption.py   # AES-256 + SHA-256
+│   │   ├── main.py         # App entry + Rate Limiting
+│   │   ├── models.py       # SQL Models + AuditLogs
+│   │   ├── auth.py         # JWT + Bcrypt + TOTP
+│   │   ├── encryption.py   # AES-256 + ECDH
 │   │   └── routers/        # API endpoints
-│   ├── tests/              # Unit tests
-│   ├── Dockerfile
 │   └── docker-compose.yml
-├── frontend/                # Next.js frontend
+├── frontend/                # Next.js React UI
 │   ├── app/                # Pages (App Router)
-│   ├── components/         # UI components
-│   └── lib/                # API client, auth
-├── docs/                    # Documentation
-└── INTERVIEW_QUESTIONS_AND_ANSWERS.md
+│   └── lib/                # API client & Auth state
+└── docs/                    # Security Documentation
 ```
 
 ---
 
-## 🔒 Security Architecture
-
-```
-Layer 1: Authentication  →  Bcrypt + JWT
-Layer 2: Authorization   →  Ownership verification
-Layer 3: Encryption      →  AES-256-CBC per file
-Layer 4: Integrity       →  SHA-256 verification
-Layer 5: Access Control  →  Expiry, one-time, password
-Layer 6: Audit Trail     →  Download logging
-```
-
----
-
-## 📝 License
-
-This project was built for educational purposes (CNS Final Year Project).
-
----
-
-*Built with ❤️ using FastAPI, Next.js, and AES-256 encryption*
+*Built with ❤️ and Math.*

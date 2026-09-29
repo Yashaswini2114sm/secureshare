@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { QRCodeSVG } from "qrcode.react";
 
 export default function RegisterPage() {
   const [username, setUsername] = useState("");
@@ -12,7 +13,9 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { register, login } = useAuth();
+  const [registered, setRegistered] = useState(false);
+  const [qrUrl, setQrUrl] = useState("");
+  const { register } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,10 +39,13 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      await register(username, email, password);
-      // Auto-login after registration
-      await login(username, password);
-      router.push("/dashboard");
+      const response = await register(username, email, password);
+      if (response && response.otpauth_url) {
+        setQrUrl(response.otpauth_url);
+        setRegistered(true);
+      } else {
+        router.push("/login");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -61,9 +67,33 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        {/* Form */}
-        <div className="glass-card p-8 glow-brand">
-          <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Form or 2FA Setup */}
+        {registered ? (
+          <div className="glass-card p-8 glow-accent text-center">
+            <div className="w-16 h-16 mx-auto rounded-full bg-accent-500/20 flex items-center justify-center mb-6">
+              <svg className="w-8 h-8 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-white mb-2">Setup 2FA</h2>
+            <p className="text-sm text-slate-400 mb-6">
+              Scan this QR code with Google Authenticator or Authy to secure your account.
+            </p>
+            
+            <div className="bg-white p-4 rounded-xl inline-block mb-6">
+              <QRCodeSVG value={qrUrl} size={200} />
+            </div>
+            
+            <button
+              onClick={() => router.push("/login")}
+              className="w-full btn-primary py-3 rounded-xl text-white font-semibold text-sm"
+            >
+              I have scanned it, proceed to Login
+            </button>
+          </div>
+        ) : (
+          <div className="glass-card p-8 glow-brand">
+            <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                 {error}
@@ -165,6 +195,7 @@ export default function RegisterPage() {
             </p>
           </div>
         </div>
+        )}
 
         {/* Security note */}
         <p className="text-center text-xs text-slate-500 mt-6">

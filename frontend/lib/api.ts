@@ -16,6 +16,15 @@ function getToken(): string | null {
 }
 
 /**
+ * Convert ArrayBuffer to Hex String for Cryptographic Exchange
+ */
+function bufferToHex(buffer: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
  * Store JWT token in localStorage.
  */
 export function setToken(token: string): void {
@@ -93,6 +102,11 @@ export interface MessageResponse {
   success: boolean;
 }
 
+export interface RegisterResponse extends MessageResponse {
+  totp_secret: string;
+  otpauth_url: string;
+}
+
 /**
  * Register a new user account.
  */
@@ -100,8 +114,8 @@ export async function registerUser(
   username: string,
   email: string,
   password: string
-): Promise<MessageResponse> {
-  return apiRequest<MessageResponse>("/api/auth/register", {
+): Promise<RegisterResponse> {
+  return apiRequest<RegisterResponse>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify({ username, email, password }),
   });
@@ -112,11 +126,12 @@ export async function registerUser(
  */
 export async function loginUser(
   username: string,
-  password: string
+  password: string,
+  totp_code?: string
 ): Promise<LoginResponse> {
   const response = await apiRequest<LoginResponse>("/api/auth/login", {
     method: "POST",
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, totp_code }),
   });
 
   // Store token automatically
@@ -146,6 +161,14 @@ export interface FileUploadResponse {
   is_public: boolean;
   created_at: string;
   message: string;
+  crypto_logs?: {
+    client_pub_key: string;
+    server_pub_key: string;
+    derived_aes_key: string;
+    aes_iv: string;
+    sha256_hash: string;
+    ciphertext_sample: string;
+  };
 }
 
 export interface FileDetail {
@@ -189,6 +212,21 @@ export async function uploadFile(
   formData.append("is_one_time", (options.isOneTime ?? false).toString());
   formData.append("max_downloads", (options.maxDownloads ?? 0).toString());
   formData.append("is_public", (options.isPublic ?? true).toString());
+
+  try {
+    // Generate Ephemeral Elliptic-Curve Diffie-Hellman Keypair for Secure Handshake
+    const keyPair = await window.crypto.subtle.generateKey(
+      { name: "ECDH", namedCurve: "P-256" },
+      true,
+      ["deriveKey", "deriveBits"]
+    );
+    // Export Public Key as Raw bytes and convert to Hex
+    const pubKeyBuffer = await window.crypto.subtle.exportKey("raw", keyPair.publicKey);
+    const pubKeyHex = bufferToHex(pubKeyBuffer);
+    formData.append("client_public_key_hex", pubKeyHex);
+  } catch (e) {
+    console.error("Browser does not support WebCrypto ECDH.", e);
+  }
 
   // Use XMLHttpRequest for upload progress tracking
   return new Promise((resolve, reject) => {
