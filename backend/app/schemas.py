@@ -146,6 +146,52 @@ class FileDeleteResponse(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════
+# ACCESS REQUEST SCHEMAS
+# ═══════════════════════════════════════════════════════════════════
+
+class FileAccessStatusResponse(BaseModel):
+    """Response schema checking user's access relationship with a file."""
+    file_id: str
+    original_filename: str
+    file_size: int
+    mime_type: str
+    owner: str
+    is_owner: bool
+    is_authenticated: bool = False
+    access_status: str  # NONE, PENDING, APPROVED, REJECTED, REVOKED
+    has_password: bool
+    is_expired: bool
+    is_one_time: bool
+    is_downloaded: bool
+    max_downloads: int
+    download_count: int
+
+    model_config = {"from_attributes": True}
+
+
+class AccessRequestDetailResponse(BaseModel):
+    """Detailed view of an access request for the file owner."""
+    id: int
+    file_id: str
+    original_filename: str
+    requester_id: int
+    requester_username: str
+    requester_email: str
+    status: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class OwnerAccessRequestsResponse(BaseModel):
+    """List of all access requests for files owned by the user."""
+    requests: List[AccessRequestDetailResponse]
+    total_pending: int
+    total: int
+
+
+# ═══════════════════════════════════════════════════════════════════
 # DOWNLOAD LOG SCHEMAS
 # ═══════════════════════════════════════════════════════════════════
 

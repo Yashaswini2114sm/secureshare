@@ -44,7 +44,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import selectinload
 
-from app.auth import get_current_user, hash_password, verify_password
+from app.auth import (
+    get_current_user,
+    get_current_user_flexible,
+    get_optional_user,
+    hash_password,
+    verify_password,
+)
 from app.config import settings
 from app.database import get_db
 from app.encryption import (
@@ -55,15 +61,28 @@ from app.encryption import (
     verify_file_integrity,
     perform_ecdh_key_exchange,
 )
-from app.models import DownloadLog, File as FileModel, User
+from app.models import AccessRequest, AuditLog, DownloadLog, File as FileModel, User
 from app.schemas import (
+    AccessRequestDetailResponse,
+    FileAccessStatusResponse,
     FileDeleteResponse,
     FileDetailResponse,
     FileListResponse,
     FileUploadResponse,
+    MessageResponse,
+    OwnerAccessRequestsResponse,
 )
 
 router = APIRouter(prefix="/api/files", tags=["Files"])
+
+
+def is_file_expired(expires_at: Optional[datetime]) -> bool:
+    """Check if a file has expired, safely handling naive and aware datetimes."""
+    if not expires_at:
+        return False
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at < datetime.now(timezone.utc)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -173,6 +192,16 @@ async def upload_file(
     await db.flush()
     await db.refresh(file_record)
 
+    # Audit Log
+    upload_audit = AuditLog(
+        user_id=current_user.id,
+        action=f"FILE_UPLOADED:file_{file_record.file_id}",
+        ip_address="127.0.0.1",
+        user_agent="SecureShare Client",
+    )
+    db.add(upload_audit)
+    await db.flush()
+
     crypto_logs = {
         "client_pub_key": client_public_key_hex if client_public_key_hex else "N/A (Generated random key)",
         "server_pub_key": server_pub_key,
@@ -230,7 +259,7 @@ async def list_files(
     file_list = []
     for f in files:
         # Skip expired files
-        if f.expires_at and f.expires_at < datetime.now(timezone.utc):
+        if is_file_expired(f.expires_at):
             continue
 
         file_list.append(
@@ -299,7 +328,7 @@ async def get_file_info(
         )
 
     # Check if file has expired
-    if file_record.expires_at and file_record.expires_at < datetime.now(timezone.utc):
+    if is_file_expired(file_record.expires_at):
         raise HTTPException(
             status_code=status.HTTP_410_GONE,
             detail="This file has expired and is no longer available",
@@ -323,28 +352,363 @@ async def get_file_info(
 
 
 # ═══════════════════════════════════════════════════════════════════
+# ACCESS REQUEST MANAGEMENT (OWNER ENDPOINTS)
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get(
+    "/access-requests/owner",
+    response_model=OwnerAccessRequestsResponse,
+    summary="Get all access requests for files owned by current user",
+)
+async def get_owner_access_requests(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> OwnerAccessRequestsResponse:
+    """List all access requests for files owned by the authenticated user."""
+    result = await db.execute(
+        select(AccessRequest)
+        .join(FileModel, AccessRequest.file_id == FileModel.id)
+        .options(selectinload(AccessRequest.file), selectinload(AccessRequest.requester))
+        .where(FileModel.owner_id == current_user.id)
+        .order_by(AccessRequest.created_at.desc())
+    )
+    requests = result.scalars().all()
+
+    request_items = [
+        AccessRequestDetailResponse(
+            id=r.id,
+            file_id=r.file.file_id,
+            original_filename=r.file.original_filename,
+            requester_id=r.user_id,
+            requester_username=r.requester.username,
+            requester_email=r.requester.email,
+            status=r.status,
+            created_at=r.created_at,
+            updated_at=r.updated_at,
+        )
+        for r in requests
+    ]
+    total_pending = sum(1 for r in requests if r.status == "PENDING")
+
+    return OwnerAccessRequestsResponse(
+        requests=request_items,
+        total_pending=total_pending,
+        total=len(request_items),
+    )
+
+
+@router.post(
+    "/access-requests/{request_id}/approve",
+    response_model=MessageResponse,
+    summary="Approve an access request",
+)
+async def approve_access_request(
+    request_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """Approve a recipient's request to access a file."""
+    result = await db.execute(
+        select(AccessRequest)
+        .options(selectinload(AccessRequest.file), selectinload(AccessRequest.requester))
+        .where(AccessRequest.id == request_id)
+    )
+    access_req = result.scalar_one_or_none()
+    if not access_req:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Access request not found")
+
+    if access_req.file.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the file owner can approve requests",
+        )
+
+    access_req.status = "APPROVED"
+    access_req.updated_at = datetime.now(timezone.utc)
+
+    client_ip = request.client.host if request and request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+    audit = AuditLog(
+        user_id=current_user.id,
+        action=f"ACCESS_APPROVED:req_{access_req.id}:file_{access_req.file.file_id}:user_{access_req.user_id}",
+        ip_address=client_ip,
+        user_agent=user_agent,
+    )
+    db.add(audit)
+    await db.flush()
+
+    return MessageResponse(message="Access request approved successfully", success=True)
+
+
+@router.post(
+    "/access-requests/{request_id}/reject",
+    response_model=MessageResponse,
+    summary="Reject an access request",
+)
+async def reject_access_request(
+    request_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """Reject a recipient's request to access a file."""
+    result = await db.execute(
+        select(AccessRequest)
+        .options(selectinload(AccessRequest.file), selectinload(AccessRequest.requester))
+        .where(AccessRequest.id == request_id)
+    )
+    access_req = result.scalar_one_or_none()
+    if not access_req:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Access request not found")
+
+    if access_req.file.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the file owner can reject requests",
+        )
+
+    access_req.status = "REJECTED"
+    access_req.updated_at = datetime.now(timezone.utc)
+
+    client_ip = request.client.host if request and request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+    audit = AuditLog(
+        user_id=current_user.id,
+        action=f"ACCESS_REJECTED:req_{access_req.id}:file_{access_req.file.file_id}:user_{access_req.user_id}",
+        ip_address=client_ip,
+        user_agent=user_agent,
+    )
+    db.add(audit)
+    await db.flush()
+
+    return MessageResponse(message="Access request rejected", success=True)
+
+
+@router.post(
+    "/access-requests/{request_id}/revoke",
+    response_model=MessageResponse,
+    summary="Revoke previously granted access",
+)
+async def revoke_access_request(
+    request_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """Revoke previously granted access permission from a recipient."""
+    result = await db.execute(
+        select(AccessRequest)
+        .options(selectinload(AccessRequest.file), selectinload(AccessRequest.requester))
+        .where(AccessRequest.id == request_id)
+    )
+    access_req = result.scalar_one_or_none()
+    if not access_req:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Access request not found")
+
+    if access_req.file.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the file owner can revoke access",
+        )
+
+    access_req.status = "REVOKED"
+    access_req.updated_at = datetime.now(timezone.utc)
+
+    client_ip = request.client.host if request and request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+    audit = AuditLog(
+        user_id=current_user.id,
+        action=f"ACCESS_REVOKED:req_{access_req.id}:file_{access_req.file.file_id}:user_{access_req.user_id}",
+        ip_address=client_ip,
+        user_agent=user_agent,
+    )
+    db.add(audit)
+    await db.flush()
+
+    return MessageResponse(message="Access revoked successfully", success=True)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# FILE ACCESS STATUS & REQUEST ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get(
+    "/{file_id}/access-status",
+    response_model=FileAccessStatusResponse,
+    summary="Get access status for a file",
+    description="Check whether caller is owner, has pending/approved/rejected request, or needs to request access.",
+)
+async def get_file_access_status(
+    file_id: str,
+    request: Request,
+    user: Optional[User] = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+) -> FileAccessStatusResponse:
+    result = await db.execute(
+        select(FileModel).options(selectinload(FileModel.owner)).where(FileModel.file_id == file_id)
+    )
+    file_record = result.scalar_one_or_none()
+    if not file_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+
+    expired = is_file_expired(file_record.expires_at)
+    is_owner = False
+    access_status = "NONE"
+    is_auth = False
+
+    if user:
+        is_auth = True
+        if user.id == file_record.owner_id:
+            is_owner = True
+            access_status = "APPROVED"
+        else:
+            req_result = await db.execute(
+                select(AccessRequest).where(
+                    AccessRequest.file_id == file_record.id,
+                    AccessRequest.user_id == user.id,
+                )
+            )
+            req = req_result.scalar_one_or_none()
+            if req:
+                access_status = req.status
+            else:
+                access_status = "NONE"
+
+    return FileAccessStatusResponse(
+        file_id=file_record.file_id,
+        original_filename=file_record.original_filename,
+        file_size=file_record.file_size,
+        mime_type=file_record.mime_type,
+        owner=file_record.owner.username if file_record.owner else "Unknown",
+        is_owner=is_owner,
+        is_authenticated=is_auth,
+        access_status=access_status,
+        has_password=bool(file_record.password_hash),
+        is_expired=expired,
+        is_one_time=file_record.is_one_time,
+        is_downloaded=file_record.is_downloaded,
+        max_downloads=file_record.max_downloads,
+        download_count=file_record.download_count,
+    )
+
+
+@router.post(
+    "/{file_id}/request-access",
+    response_model=MessageResponse,
+    summary="Request access to a file",
+    description="Recipient submits an access request to the file owner.",
+)
+async def request_file_access(
+    file_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    result = await db.execute(
+        select(FileModel).options(selectinload(FileModel.owner)).where(FileModel.file_id == file_id)
+    )
+    file_record = result.scalar_one_or_none()
+    if not file_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+
+    if is_file_expired(file_record.expires_at):
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="File has expired")
+
+    if file_record.owner_id == current_user.id:
+        return MessageResponse(message="You are the owner of this file", success=True)
+
+    # Check existing request
+    req_result = await db.execute(
+        select(AccessRequest).where(
+            AccessRequest.file_id == file_record.id,
+            AccessRequest.user_id == current_user.id,
+        )
+    )
+    access_req = req_result.scalar_one_or_none()
+
+    if access_req:
+        if access_req.status == "APPROVED":
+            return MessageResponse(message="Access has already been approved", success=True)
+        # Re-request if REJECTED, REVOKED, or renew PENDING
+        access_req.status = "PENDING"
+        access_req.updated_at = datetime.now(timezone.utc)
+    else:
+        access_req = AccessRequest(
+            file_id=file_record.id,
+            user_id=current_user.id,
+            status="PENDING",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        db.add(access_req)
+
+    client_ip = request.client.host if request and request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+    audit = AuditLog(
+        user_id=current_user.id,
+        action=f"ACCESS_REQUESTED:file_{file_record.file_id}",
+        ip_address=client_ip,
+        user_agent=user_agent,
+    )
+    db.add(audit)
+    await db.flush()
+
+    return MessageResponse(message="Access request submitted successfully", success=True)
+
+
+# ═══════════════════════════════════════════════════════════════════
 # DOWNLOAD FILE
 # ═══════════════════════════════════════════════════════════════════
 
 @router.get(
     "/{file_id}/download",
     summary="Download and decrypt a file",
-    description="Download a file. Decrypts on-the-fly and verifies integrity.",
+    description="Download a file. Enforces owner or approved recipient authorization, decrypts on-the-fly and verifies integrity.",
 )
 async def download_file(
     file_id: str,
+    request: Request,
     password: Optional[str] = Query(None, description="File password if required"),
-    request: Request = None,
+    current_user: User = Depends(get_current_user_flexible),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    result = await db.execute(select(FileModel).where(FileModel.file_id == file_id))
+    client_ip = request.client.host if request and request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+
+    result = await db.execute(
+        select(FileModel).options(selectinload(FileModel.owner)).where(FileModel.file_id == file_id)
+    )
     file_record = result.scalar_one_or_none()
 
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")
 
-    if file_record.expires_at and file_record.expires_at < datetime.now(timezone.utc):
+    if is_file_expired(file_record.expires_at):
         raise HTTPException(status_code=410, detail="File has expired")
+
+    # Access control: Must be owner OR have APPROVED access request
+    if file_record.owner_id != current_user.id:
+        req_result = await db.execute(
+            select(AccessRequest).where(
+                AccessRequest.file_id == file_record.id,
+                AccessRequest.user_id == current_user.id,
+            )
+        )
+        access_req = req_result.scalar_one_or_none()
+        if not access_req or access_req.status != "APPROVED":
+            unauth_audit = AuditLog(
+                user_id=current_user.id,
+                action=f"UNAUTHORIZED_ACCESS_ATTEMPT:file_{file_record.file_id}",
+                ip_address=client_ip,
+                user_agent=user_agent,
+            )
+            db.add(unauth_audit)
+            await db.flush()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. You do not have owner approval to download this file.",
+            )
 
     if file_record.password_hash:
         if not password:
@@ -370,7 +734,7 @@ async def download_file(
             file_record.encryption_key,
             file_record.encryption_iv,
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to decrypt file. The file may be corrupted.",
@@ -386,15 +750,21 @@ async def download_file(
     if file_record.is_one_time:
         file_record.is_downloaded = True
 
-    client_ip = request.client.host if request and request.client else "unknown"
-    user_agent = request.headers.get("user-agent", "unknown")
     download_log = DownloadLog(
         file_id=file_record.id,
-        downloaded_by="link_visitor",
+        downloaded_by=current_user.username,
         ip_address=client_ip,
         user_agent=user_agent,
     )
     db.add(download_log)
+
+    download_audit = AuditLog(
+        user_id=current_user.id,
+        action=f"FILE_DOWNLOADED:file_{file_record.file_id}",
+        ip_address=client_ip,
+        user_agent=user_agent,
+    )
+    db.add(download_audit)
     await db.flush()
 
     return Response(

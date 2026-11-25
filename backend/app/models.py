@@ -65,6 +65,9 @@ class User(Base):
 
     # Relationship: User has many Files
     files = relationship("File", back_populates="owner", cascade="all, delete-orphan")
+    access_requests = relationship(
+        "AccessRequest", back_populates="requester", cascade="all, delete-orphan"
+    )
 
 
 class File(Base):
@@ -133,6 +136,9 @@ class File(Base):
     download_logs = relationship(
         "DownloadLog", back_populates="file", cascade="all, delete-orphan"
     )
+    access_requests = relationship(
+        "AccessRequest", back_populates="file", cascade="all, delete-orphan"
+    )
 
 
 class DownloadLog(Base):
@@ -190,4 +196,38 @@ class AuditLog(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class AccessRequest(Base):
+    """
+    Access Request model for restricted files.
+    
+    Tracks requests by recipients to access a shared file and the owner's decision.
+    
+    Columns:
+        id         — Auto-increment primary key
+        file_id    — Foreign key to files table
+        user_id    — Foreign key to users table (the requester)
+        status     — PENDING, APPROVED, REJECTED, REVOKED
+        created_at — Request timestamp (UTC)
+        updated_at — Decision timestamp (UTC)
+    """
+    __tablename__ = "access_requests"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    file_id = Column(Integer, ForeignKey("files.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    status = Column(String(20), default="PENDING", nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    file = relationship("File", back_populates="access_requests")
+    requester = relationship("User", back_populates="access_requests")
 

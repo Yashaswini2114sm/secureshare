@@ -6,6 +6,7 @@ Tests for user registration, login, and profile endpoints.
 
 # pyrefly: ignore [missing-import]
 import pytest
+import pyotp
 # pyrefly: ignore [missing-import]
 from httpx import AsyncClient
 
@@ -86,21 +87,58 @@ async def test_register_short_password(client: AsyncClient):
 async def test_login_success(client: AsyncClient):
     """Test successful login returns JWT token."""
     # Register
-    await client.post("/api/auth/register", json={
+    reg_response = await client.post("/api/auth/register", json={
         "username": "loginuser",
         "email": "login@example.com",
         "password": "SecurePass123",
     })
-    # Login
+    totp_secret = reg_response.json()["totp_secret"]
+    totp_code = pyotp.TOTP(totp_secret).now()
+
+    # Login with valid 2FA TOTP code
     response = await client.post("/api/auth/login", json={
         "username": "loginuser",
         "password": "SecurePass123",
+        "totp_code": totp_code,
     })
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
     assert data["token_type"] == "bearer"
     assert data["user"]["username"] == "loginuser"
+
+
+@pytest.mark.asyncio
+async def test_login_missing_totp(client: AsyncClient):
+    """Test that login without required 2FA code returns 400."""
+    await client.post("/api/auth/register", json={
+        "username": "totpuser",
+        "email": "totp@example.com",
+        "password": "SecurePass123",
+    })
+    response = await client.post("/api/auth/login", json={
+        "username": "totpuser",
+        "password": "SecurePass123",
+    })
+    assert response.status_code == 400
+    assert "2FA code is required" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_login_invalid_totp(client: AsyncClient):
+    """Test that login with invalid 2FA code returns 401."""
+    await client.post("/api/auth/register", json={
+        "username": "badtotpuser",
+        "email": "badtotp@example.com",
+        "password": "SecurePass123",
+    })
+    response = await client.post("/api/auth/login", json={
+        "username": "badtotpuser",
+        "password": "SecurePass123",
+        "totp_code": "000000",
+    })
+    assert response.status_code == 401
+    assert "Invalid 2FA code" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 # pyrefly: ignore [missing-import]
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 # pyrefly: ignore [missing-import]
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -209,3 +209,66 @@ async def get_current_user(
         raise credentials_exception
     
     return user
+
+
+async def get_current_user_flexible(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    Extract and verify current user from Authorization header or ?token= query parameter.
+    Provides secure authentication for both API calls and direct browser file downloads.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required. Please log in.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    token = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+    elif "token" in request.query_params:
+        token = request.query_params.get("token")
+        
+    if not token:
+        raise credentials_exception
+        
+    username = verify_token(token)
+    if username is None:
+        raise credentials_exception
+        
+    result = await db.execute(select(User).where(User.username == username))
+    user = result.scalar_one_or_none()
+    
+    if user is None:
+        raise credentials_exception
+        
+    return user
+
+
+async def get_optional_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    """
+    Extract user if token is provided and valid, otherwise return None.
+    Does not raise HTTPException for missing or invalid tokens.
+    """
+    token = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+    elif "token" in request.query_params:
+        token = request.query_params.get("token")
+        
+    if not token:
+        return None
+        
+    username = verify_token(token)
+    if username is None:
+        return None
+        
+    result = await db.execute(select(User).where(User.username == username))
+    return result.scalar_one_or_none()

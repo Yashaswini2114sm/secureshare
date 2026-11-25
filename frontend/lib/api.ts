@@ -350,3 +350,92 @@ export function formatDate(dateString: string): string {
     minute: "2-digit",
   });
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// ACCESS REQUEST API
+// ═══════════════════════════════════════════════════════════════════
+
+export interface FileAccessStatus {
+  file_id: string;
+  original_filename: string;
+  file_size: number;
+  mime_type: string;
+  owner: string;
+  is_owner: boolean;
+  is_authenticated: boolean;
+  access_status: "NONE" | "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
+  has_password: boolean;
+  is_expired: boolean;
+  is_one_time: boolean;
+  is_downloaded: boolean;
+  max_downloads: number;
+  download_count: number;
+}
+
+export interface AccessRequestItem {
+  id: number;
+  file_id: string;
+  original_filename: string;
+  requester_id: number;
+  requester_username: string;
+  requester_email: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface OwnerAccessRequestsResponse {
+  requests: AccessRequestItem[];
+  total_pending: number;
+  total: number;
+}
+
+/**
+ * Get access status for a file relative to current user.
+ */
+export async function getFileAccessStatus(fileId: string): Promise<FileAccessStatus> {
+  return apiRequest<FileAccessStatus>(`/api/files/${fileId}/access-status`);
+}
+
+/**
+ * Submit an access request to the file owner.
+ */
+export async function requestFileAccess(fileId: string): Promise<MessageResponse> {
+  return apiRequest<MessageResponse>(`/api/files/${fileId}/request-access`, {
+    method: "POST",
+  });
+}
+
+/**
+ * Get all access requests for files owned by the user.
+ */
+export async function getOwnerAccessRequests(): Promise<OwnerAccessRequestsResponse> {
+  return apiRequest<OwnerAccessRequestsResponse>("/api/files/access-requests/owner");
+}
+
+/**
+ * Approve an access request.
+ */
+export async function approveAccessRequest(requestId: number): Promise<MessageResponse> {
+  return apiRequest<MessageResponse>(`/api/files/access-requests/${requestId}/approve`, {
+    method: "POST",
+  });
+}
+
+/**
+ * Reject an access request.
+ */
+export async function rejectAccessRequest(requestId: number): Promise<MessageResponse> {
+  return apiRequest<MessageResponse>(`/api/files/access-requests/${requestId}/reject`, {
+    method: "POST",
+  });
+}
+
+/**
+ * Revoke previously granted access.
+ */
+export async function revokeAccessRequest(requestId: number): Promise<MessageResponse> {
+  return apiRequest<MessageResponse>(`/api/files/access-requests/${requestId}/revoke`, {
+    method: "POST",
+  });
+}

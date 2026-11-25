@@ -221,27 +221,70 @@ slide9.addText(
     { x: 0.7, y: 1.5, w: 8.6, h: 3.2, fontSize: 15, color: 'FFFFFF', lineSpacing: 22 }
 );
 
-// ── Slide 10: Task Allocation ───────────────────────────────────────────────────
+// ── Slide 10: Defense-in-Depth Security Mechanisms ────────────────────────────
 let slide10 = pptx.addSlide({ masterName: 'DARK_MASTER' });
-slide10.addText("Project Execution & Task Allocation", { x: 0.5, y: 0.5, w: 9, h: 0.5, fontSize: 32, bold: true, color: 'FFFFFF' });
+slide10.addText("Defense-in-Depth Security Mechanisms", { x: 0.5, y: 0.5, w: 9, h: 0.5, fontSize: 30, bold: true, color: 'FFFFFF' });
 
-addCard(slide10, 0.5, 1.5, 2.8, 3);
-slide10.addShape(pptx.ShapeType.rect, { x: 0.5, y: 1.5, w: 2.8, h: 0.1, fill: { color: 'E040FB' } });
-slide10.addText("Frontend & UI/UX", { x: 0.6, y: 1.7, w: 2.6, h: 0.4, fontSize: 16, bold: true, color: 'E040FB' });
-slide10.addText("Yashaswini M\nSneha MC", { x: 0.6, y: 2.2, w: 2.6, h: 0.6, fontSize: 14, color: 'FFFFFF', bold: true });
-slide10.addText("• Next.js Architecture\n• Tailwind Styling\n• API Integration", { x: 0.6, y: 2.9, w: 2.6, h: 1, fontSize: 12, color: 'A0B2D0' });
+addCard(slide10, 0.5, 1.3, 4.3, 1.8);
+slide10.addShape(pptx.ShapeType.rect, { x: 0.5, y: 1.3, w: 4.3, h: 0.08, fill: { color: '00F0FF' } });
+slide10.addText("1. ECDH P-256 Key Exchange", { x: 0.7, y: 1.45, w: 3.9, h: 0.35, fontSize: 16, bold: true, color: '00F0FF' });
+slide10.addText("Browser and server dynamically exchange ephemeral public keys via WebCrypto and derive an identical AES-256 key using HKDF-SHA256, defeating Man-in-the-Middle eavesdropping.", { x: 0.7, y: 1.85, w: 3.9, h: 1.1, fontSize: 12, color: 'FFFFFF' });
 
-addCard(slide10, 3.6, 1.5, 2.8, 3);
-slide10.addShape(pptx.ShapeType.rect, { x: 3.6, y: 1.5, w: 2.8, h: 0.1, fill: { color: '00F0FF' } });
-slide10.addText("Backend Security", { x: 3.7, y: 1.7, w: 2.6, h: 0.4, fontSize: 16, bold: true, color: '00F0FF' });
-slide10.addText("Chinmayi H", { x: 3.7, y: 2.2, w: 2.6, h: 0.4, fontSize: 14, color: 'FFFFFF', bold: true });
-slide10.addText("• FastAPI Logic\n• AES-256 Encryption\n• SHA-256 Hashing", { x: 3.7, y: 2.7, w: 2.6, h: 1, fontSize: 12, color: 'A0B2D0' });
+addCard(slide10, 5.2, 1.3, 4.3, 1.8);
+slide10.addShape(pptx.ShapeType.rect, { x: 5.2, y: 1.3, w: 4.3, h: 0.08, fill: { color: 'E040FB' } });
+slide10.addText("2. Hardware TOTP 2FA (RFC 6238)", { x: 5.4, y: 1.45, w: 3.9, h: 0.35, fontSize: 16, bold: true, color: 'E040FB' });
+slide10.addText("Google Authenticator integration via HMAC-SHA1 QR code sync. Generates a fresh 6-digit code every 30 seconds, neutralizing account takeover and stolen credentials.", { x: 5.4, y: 1.85, w: 3.9, h: 1.1, fontSize: 12, color: 'FFFFFF' });
 
-addCard(slide10, 6.7, 1.5, 2.8, 3);
-slide10.addShape(pptx.ShapeType.rect, { x: 6.7, y: 1.5, w: 2.8, h: 0.1, fill: { color: '4CAF50' } });
-slide10.addText("Database & Infra", { x: 6.8, y: 1.7, w: 2.6, h: 0.4, fontSize: 16, bold: true, color: '4CAF50' });
-slide10.addText("Harshita B", { x: 6.8, y: 2.2, w: 2.6, h: 0.4, fontSize: 14, color: 'FFFFFF', bold: true });
-slide10.addText("• PostgreSQL Schema\n• JWT Auth\n• Docker Setup", { x: 6.8, y: 2.7, w: 2.6, h: 1, fontSize: 12, color: 'A0B2D0' });
+addCard(slide10, 0.5, 3.3, 4.3, 1.8);
+slide10.addShape(pptx.ShapeType.rect, { x: 0.5, y: 3.3, w: 4.3, h: 0.08, fill: { color: 'FF3366' } });
+slide10.addText("3. Anti-Forensic File Shredding", { x: 0.7, y: 3.45, w: 3.9, h: 0.35, fontSize: 16, bold: true, color: 'FF3366' });
+slide10.addText("Standard OS deletion leaves physical disk bytes intact. SecureShare overwrites disk bytes with cryptographic noise (os.urandom) and forces os.fsync() before deletion.", { x: 0.7, y: 3.85, w: 3.9, h: 1.1, fontSize: 12, color: 'FFFFFF' });
+
+addCard(slide10, 5.2, 3.3, 4.3, 1.8);
+slide10.addShape(pptx.ShapeType.rect, { x: 5.2, y: 3.3, w: 4.3, h: 0.08, fill: { color: '4CAF50' } });
+slide10.addText("4. Rate-Limiting & Audit Trail", { x: 5.4, y: 3.45, w: 3.9, h: 0.35, fontSize: 16, bold: true, color: '4CAF50' });
+slide10.addText("SlowAPI enforces 5 req/min brute-force throttling on login. Comprehensive AuditLog records IP, User-Agent, and event status (LOGIN_SUCCESS, 2FA_FAILED, DOWNLOAD).", { x: 5.4, y: 3.85, w: 3.9, h: 1.1, fontSize: 12, color: 'FFFFFF' });
+
+// ── Slide 11: Testing, Validation & Security Analysis ───────────────────────
+let slide11 = pptx.addSlide({ masterName: 'DARK_MASTER' });
+slide11.addText("Testing, Validation & Security Analysis", { x: 0.5, y: 0.5, w: 9, h: 0.5, fontSize: 30, bold: true, color: 'FFFFFF' });
+
+addCard(slide11, 0.5, 1.3, 2.8, 3.6);
+slide11.addShape(pptx.ShapeType.rect, { x: 0.5, y: 1.3, w: 2.8, h: 0.08, fill: { color: '4CAF50' } });
+slide11.addText("Authentication Tests\n(13 Tests • 100% Pass)", { x: 0.6, y: 1.5, w: 2.6, h: 0.6, fontSize: 14, bold: true, color: '4CAF50' });
+slide11.addText("• User registration flow\n• Duplicate username check\n• Duplicate email check\n• Password min-length (6 chars)\n• Valid TOTP 2FA login\n• Missing 2FA rejection\n• Invalid 2FA code rejection\n• Wrong password handling\n• JWT verification & /me", { x: 0.6, y: 2.2, w: 2.6, h: 2.5, fontSize: 11, color: 'FFFFFF', lineSpacing: 16 });
+
+addCard(slide11, 3.6, 1.3, 2.8, 3.6);
+slide11.addShape(pptx.ShapeType.rect, { x: 3.6, y: 1.3, w: 2.8, h: 0.08, fill: { color: '00F0FF' } });
+slide11.addText("Cryptography Tests\n(11 Tests • 100% Pass)", { x: 3.7, y: 1.5, w: 2.6, h: 0.6, fontSize: 14, bold: true, color: '00F0FF' });
+slide11.addText("• 256-bit Key & 128-bit IV length\n• Random key uniqueness\n• AES-256 encrypt/decrypt cycle\n• Large file data (10KB+)\n• Raw binary data integrity\n• Wrong key decryption failure\n• SHA-256 deterministic check\n• Avalanche effect validation\n• ECDH P-256 key handshake", { x: 3.7, y: 2.2, w: 2.6, h: 2.5, fontSize: 11, color: 'FFFFFF', lineSpacing: 16 });
+
+addCard(slide11, 6.7, 1.3, 2.8, 3.6);
+slide11.addShape(pptx.ShapeType.rect, { x: 6.7, y: 1.3, w: 2.8, h: 0.08, fill: { color: 'FF9800' } });
+slide11.addText("File Lifecycle Tests\n(10 Tests • 100% Pass)", { x: 6.8, y: 1.5, w: 2.6, h: 0.6, fontSize: 14, bold: true, color: 'FF9800' });
+slide11.addText("• Authenticated upload\n• Reject unauthenticated upload\n• Reject empty file upload\n• File metadata listing\n• Decrypt & verify on download\n• Password-protected download\n• One-time download lockout\n• Anti-forensic file deletion\n• 404 on missing file ID", { x: 6.8, y: 2.2, w: 2.6, h: 2.5, fontSize: 11, color: 'FFFFFF', lineSpacing: 16 });
+
+// ── Slide 12: Task Allocation ───────────────────────────────────────────────────
+let slide12 = pptx.addSlide({ masterName: 'DARK_MASTER' });
+slide12.addText("Project Execution & Task Allocation", { x: 0.5, y: 0.5, w: 9, h: 0.5, fontSize: 32, bold: true, color: 'FFFFFF' });
+
+addCard(slide12, 0.5, 1.5, 2.8, 3);
+slide12.addShape(pptx.ShapeType.rect, { x: 0.5, y: 1.5, w: 2.8, h: 0.1, fill: { color: 'E040FB' } });
+slide12.addText("Frontend & UI/UX", { x: 0.6, y: 1.7, w: 2.6, h: 0.4, fontSize: 16, bold: true, color: 'E040FB' });
+slide12.addText("Yashaswini M\nSneha MC", { x: 0.6, y: 2.2, w: 2.6, h: 0.6, fontSize: 14, color: 'FFFFFF', bold: true });
+slide12.addText("• Next.js Architecture\n• Tailwind Styling\n• API Integration", { x: 0.6, y: 2.9, w: 2.6, h: 1, fontSize: 12, color: 'A0B2D0' });
+
+addCard(slide12, 3.6, 1.5, 2.8, 3);
+slide12.addShape(pptx.ShapeType.rect, { x: 3.6, y: 1.5, w: 2.8, h: 0.1, fill: { color: '00F0FF' } });
+slide12.addText("Backend Security", { x: 3.7, y: 1.7, w: 2.6, h: 0.4, fontSize: 16, bold: true, color: '00F0FF' });
+slide12.addText("Chinmayi H", { x: 3.7, y: 2.2, w: 2.6, h: 0.4, fontSize: 14, color: 'FFFFFF', bold: true });
+slide12.addText("• FastAPI Logic\n• AES-256 Encryption\n• SHA-256 Hashing", { x: 3.7, y: 2.7, w: 2.6, h: 1, fontSize: 12, color: 'A0B2D0' });
+
+addCard(slide12, 6.7, 1.5, 2.8, 3);
+slide12.addShape(pptx.ShapeType.rect, { x: 6.7, y: 1.5, w: 2.8, h: 0.1, fill: { color: '4CAF50' } });
+slide12.addText("Database & Infra", { x: 6.8, y: 1.7, w: 2.6, h: 0.4, fontSize: 16, bold: true, color: '4CAF50' });
+slide12.addText("Harshita B", { x: 6.8, y: 2.2, w: 2.6, h: 0.4, fontSize: 14, color: 'FFFFFF', bold: true });
+slide12.addText("• PostgreSQL Schema\n• JWT Auth\n• Docker Setup", { x: 6.8, y: 2.7, w: 2.6, h: 1, fontSize: 12, color: 'A0B2D0' });
 
 
 pptx.writeFile({ fileName: "../docs/SecureShare_Review_1_Presentation.pptx" }).then(fileName => {

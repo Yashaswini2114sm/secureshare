@@ -10,6 +10,7 @@ import os
 import pytest
 # pyrefly: ignore [missing-import]
 import pytest_asyncio
+import pyotp
 # pyrefly: ignore [missing-import]
 from httpx import AsyncClient, ASGITransport
 # pyrefly: ignore [missing-import]
@@ -26,6 +27,12 @@ os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 
 from app.main import app
 from app.database import Base, get_db
+from app.routers.auth_router import limiter as auth_limiter
+
+# Disable rate limiter during testing
+auth_limiter.enabled = False
+if hasattr(app.state, "limiter"):
+    app.state.limiter.enabled = False
 
 
 # ── Test database engine ─────────────────────────────────────────
@@ -83,15 +90,45 @@ async def client():
 async def auth_headers(client: AsyncClient):
     """Register a test user and return auth headers with JWT token."""
     # Register user
-    await client.post("/api/auth/register", json={
+    reg_response = await client.post("/api/auth/register", json={
         "username": "testuser",
         "email": "test@example.com",
         "password": "TestPass123",
     })
-    # Login to get token
-    response = await client.post("/api/auth/login", json={
+    totp_secret = reg_response.json().get("totp_secret")
+    totp_code = pyotp.TOTP(totp_secret).now() if totp_secret else None
+
+    # Login to get token with 2FA code
+    login_payload = {
         "username": "testuser",
         "password": "TestPass123",
+    }
+    if totp_code:
+        login_payload["totp_code"] = totp_code
+
+    response = await client.post("/api/auth/login", json=login_payload)
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def user2_headers(client: AsyncClient):
+    """Register a second test user and return auth headers with JWT token."""
+    reg_response = await client.post("/api/auth/register", json={
+        "username": "user2",
+        "email": "user2@example.com",
+        "password": "User2Pass123",
     })
+    totp_secret = reg_response.json().get("totp_secret")
+    totp_code = pyotp.TOTP(totp_secret).now() if totp_secret else None
+
+    login_payload = {
+        "username": "user2",
+        "password": "User2Pass123",
+    }
+    if totp_code:
+        login_payload["totp_code"] = totp_code
+
+    response = await client.post("/api/auth/login", json=login_payload)
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}

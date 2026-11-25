@@ -12,7 +12,10 @@ from app.encryption import (
     encrypt_file,
     generate_encryption_key,
     verify_file_integrity,
+    perform_ecdh_key_exchange,
 )
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.serialization import PublicFormat, Encoding
 
 
 def test_generate_key():
@@ -109,3 +112,22 @@ def test_verify_integrity_fail():
     file_hash = calculate_file_hash(original)
 
     assert verify_file_integrity(modified, file_hash) is False
+
+
+def test_perform_ecdh_key_exchange():
+    """Test ECDH key exchange with simulated client public key."""
+    # Simulate client P-256 key pair
+    client_priv = ec.generate_private_key(ec.SECP256R1())
+    client_pub_bytes = client_priv.public_key().public_bytes(
+        encoding=Encoding.X962,
+        format=PublicFormat.UncompressedPoint
+    )
+    client_pub_hex = client_pub_bytes.hex()
+
+    derived_key_hex, server_pub_hex = perform_ecdh_key_exchange(client_pub_hex)
+
+    # 32 bytes AES-256 key = 64 hex characters
+    assert len(derived_key_hex) == 64
+    # Uncompressed P-256 public key is 65 bytes = 130 hex characters
+    assert len(server_pub_hex) == 130
+    assert server_pub_hex != "error_fallback_key"
