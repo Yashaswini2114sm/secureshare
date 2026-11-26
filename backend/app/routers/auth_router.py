@@ -161,7 +161,7 @@ async def login(
                 detail="2FA code is required",
             )
         totp = pyotp.totp.TOTP(user.totp_secret)
-        if not totp.verify(credentials.totp_code):
+        if not totp.verify(credentials.totp_code, valid_window=1):
             log = AuditLog(user_id=user.id, action="2FA_FAILED", ip_address=request.client.host, user_agent=request.headers.get("user-agent"))
             db.add(log)
             await db.flush()
